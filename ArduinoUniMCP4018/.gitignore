@@ -1,0 +1,9 @@
+# PlatformIO build output
+.pio/
+
+# Python / Jupyter
+__pycache__/
+.ipynb_checkpoints/
+
+# Serial captures (keep the folder, ignore the data)
+analysis/logs/*.csv

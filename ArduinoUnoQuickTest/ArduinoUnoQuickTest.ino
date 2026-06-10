@@ -18,9 +18,9 @@
 #define MOSFET_2  4
 
 // ======= TIMING CONFIG (ms) ========
-unsigned long onTime  = 100;    // heating duration (shared)
+unsigned long onTime  = 500;    // heating duration (shared)
 unsigned long offTime = 3000;    // cooling duration (shared)
-
+c:\Users\yilin\Documents\GitHubRepo_Research\GelBot\ArduinoUnoMCP4728LDO\ArduinoUnoMCP4728LDO.ino
 // =========== STATE MACHINE ==========
 enum State { IDLE, ON_STATE, OFF_STATE };
 

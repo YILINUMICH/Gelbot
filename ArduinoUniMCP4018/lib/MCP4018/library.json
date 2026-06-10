@@ -1,0 +1,11 @@
+{
+  "name": "MCP4018",
+  "version": "1.0.0",
+  "description": "Driver for Microchip MCP4017/18/19 and MCP40D17/18/19 7-bit I2C digital potentiometers, with automatic address/variant detection.",
+  "keywords": "i2c, digipot, potentiometer, mcp4018, mcp40d18",
+  "frameworks": "arduino",
+  "platforms": "atmelavr",
+  "dependencies": [
+    { "name": "Wire" }
+  ]
+}
