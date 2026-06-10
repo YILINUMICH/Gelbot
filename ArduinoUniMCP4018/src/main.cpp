@@ -1,4 +1,4 @@
-// main.cpp — SMA Variable Voltage Controller firmware (Arduino Uno)
+// main.cpp — SMA Variable Voltage Controller firmware (Arduino Uno / Mega 2560)
 //
 // Board: PN 008-300A-0003 (Hybrid Dynamic Robotics Lab, U-Michigan)
 // See doc/Schematic PDF_[No Variations].pdf and include/config.h.
@@ -30,6 +30,10 @@ uint16_t g_cal_mv[WIPER_MAX + 1];       // calibration: code -> V_LDO in millivo
 bool     g_cal_valid = false;           // true once a valid table is loaded/built
 uint8_t  g_wiper = 0;                   // last commanded wiper code
 bool     g_sma_en = false;              // SMA_EN state
+
+// Minimum current (A) below which R_SMA cannot be resolved (avoids divide-by-zero
+// and noise blow-up). At ~0.5 LSB of ISNS the current is in the low-mA range.
+constexpr float MIN_CURRENT_FOR_R = 0.005f;   // 5 mA
 
 // EEPROM layout
 constexpr uint32_t EE_MAGIC   = 0x534D4143UL; // 'S''M''A''C'
@@ -157,7 +161,7 @@ static bool codeForVoltage(float target, uint8_t &outCode, float &achievedV) {
     return true;
 }
 
-// Set V_LDO to the closest calibrated target. Returns the chosen code or 255 on error.
+// Set V_LDO to the closest calibrated target. Returns the chosen code or -1 on error.
 static int setVoltage(float target) {
     uint8_t code; float achieved;
     if (!codeForVoltage(target, code, achieved)) {
@@ -193,7 +197,10 @@ static bool runPhase(const char *phase, float volts, uint32_t durMs, uint32_t cy
             Serial.print(code);                Serial.print(',');
             Serial.print(vldo, 4);             Serial.print(',');
             Serial.print(visns, 4);            Serial.print(',');
-            Serial.println(cur, 4);
+            Serial.print(cur, 4);               Serial.print(',');
+            // SMA resistance = (V_LDO - I*Rshunt)/I; 'nan' when current too low
+            if (cur >= MIN_CURRENT_FOR_R) Serial.println((vldo - cur * RSHUNT) / cur, 3);
+            else                          Serial.println(F("nan"));
             nextLog += LOG_INTERVAL_MS;
         }
     }
@@ -210,9 +217,12 @@ static void runCycle(float vHot, uint32_t tHot, float vCool, uint32_t tCool, uin
     Serial.print(F("ms cool=")); Serial.print(vCool, 3);
     Serial.print(F("V/"));   Serial.print(tCool);
     Serial.print(F("ms x")); Serial.println(n);
-    Serial.println(F("t_ms,phase,target_v,wiper,vldo_v,isns_v,current_a"));
+    Serial.println(F("t_ms,phase,target_v,wiper,vldo_v,isns_v,current_a,r_sma_ohm"));
 
     setSmaEnable(true);
+    // Discard the command line's trailing EOL (e.g. the '\n' after '\r') so it is
+    // not mistaken for an abort keypress on the very first phase iteration.
+    while (Serial.available()) Serial.read();
     uint32_t cycleStart = millis();
     bool aborted = false;
     for (uint16_t i = 0; i < n && !aborted; ++i) {
@@ -237,7 +247,7 @@ static void printHelp() {
     Serial.println(F("  caldump               - print stored calibration table as CSV"));
     Serial.println(F("  setv <volts>          - set V_LDO to nearest calibrated voltage"));
     Serial.println(F("  setcode <0-127>       - set wiper code directly"));
-    Serial.println(F("  read                  - print V_LDO, ISNS, current once"));
+    Serial.println(F("  read                  - print V_LDO, ISNS, current, R_SMA once"));
     Serial.println(F("  en <0|1>              - SMA enable off/on"));
     Serial.println(F("  cycle <vH> <tH> <vC> <tC> <n>  - heat/cool cycle w/ CSV log (ms)"));
     Serial.println(F("  vref [volts]          - show or set ADC reference voltage"));
@@ -253,7 +263,7 @@ static void doScan() {
         Serial.print(digipot.variantName());
         Serial.println(F(")"));
     } else {
-        Serial.println(F("# Digipot NOT FOUND. Check wiring (SDA=A4, SCL=A5, pull-ups), power."));
+        Serial.println(F("# Digipot NOT FOUND. Check wiring (SDA/SCL, pull-ups), power."));
     }
 }
 
@@ -271,9 +281,14 @@ static void doRead() {
     float vldo = readVldo();
     float visns = readIsnsVolts();
     float cur = visns / (INA_GAIN * RSHUNT);
+    // SMA voltage = shunt low-side node (V_LDO - I*Rshunt); resistance neglects MOSFET Rds(on).
+    float vsma = vldo - cur * RSHUNT;
     Serial.print(F("V_LDO=")); Serial.print(vldo, 4); Serial.print(F(" V  "));
     Serial.print(F("ISNS=")); Serial.print(visns, 4); Serial.print(F(" V  "));
     Serial.print(F("I_SMA=")); Serial.print(cur, 4);  Serial.print(F(" A  "));
+    Serial.print(F("R_SMA="));
+    if (cur >= MIN_CURRENT_FOR_R) { Serial.print(vsma / cur, 3); Serial.print(F(" ohm  ")); }
+    else                         { Serial.print(F("n/a  ")); }   // too little current to resolve
     Serial.print(F("wiper=")); Serial.print(g_wiper);
     Serial.print(F("  SMA_EN=")); Serial.println(g_sma_en ? F("on") : F("off"));
 }
@@ -307,7 +322,8 @@ static void handleLine(char *line) {
         char *a = strtok(NULL, " \t\r\n");
         if (!a) { Serial.println(F("# usage: setcode <0-127>")); return; }
         int code = atoi(a);
-        if (code < 0) code = 0; if (code > WIPER_MAX) code = WIPER_MAX;
+        if (code < 0) code = 0;
+        if (code > WIPER_MAX) code = WIPER_MAX;
         if (setWiperCode((uint8_t)code)) {
             Serial.print(F("# wiper=")); Serial.println(code);
         } else {

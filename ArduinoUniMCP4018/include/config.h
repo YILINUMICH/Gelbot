@@ -19,8 +19,10 @@
 // ----------------------------------------------------------------------------
 // Pin assignments (Arduino Uno)
 // ----------------------------------------------------------------------------
-// I2C to digipot (MCP4018): SCL=A5, SDA=A4 are fixed by the ATmega328P hardware TWI.
-//   Board nets: J3 = MCU_SCL, J4 = MCU_SDA.
+// I2C to digipot (MCP4018) is on the MCU's fixed hardware TWI pins:
+//   Arduino Uno  (ATmega328P): SDA=A4, SCL=A5
+//   Arduino Mega (ATmega2560): SDA=pin 20, SCL=pin 21
+//   Board nets: J3 = MCU_SCL, J4 = MCU_SDA. Wire.begin() uses these automatically.
 
 // SMA enable -> gate of low-side MOSFET Q1 (board net SMA_EN, header J9).
 // HIGH = SMA current path enabled, LOW = disabled.
